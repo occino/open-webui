@@ -1,12 +1,16 @@
 services:
   ollama:
     volumes:
-      - ollama:/root/.ollama
+      - ${OLLAMA_LOCATION}:/root/.ollama
+    env_file:
+      - stack.env
     container_name: ollama
     pull_policy: always
     tty: true
     restart: unless-stopped
-    image: ollama/ollama:${OLLAMA_DOCKER_TAG-latest}
+    image: ollama/ollama:latest
+    networks:
+      - proxy
 
   open-webui:
     build:
@@ -14,21 +18,30 @@ services:
       args:
         OLLAMA_BASE_URL: '/ollama'
       dockerfile: Dockerfile
-    image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG-main}
-    container_name: open-webui
+    image: ghcr.io/open-webui/open-webui:latest
+    container_name: ollama-open-webui
     volumes:
-      - open-webui:/app/backend/data
+      - ${OLLAMA_WEBUI_LOCATION}:/app/backend/data
+    env_file:
+      - stack.env
     depends_on:
       - ollama
     ports:
-      - ${OPEN_WEBUI_PORT-3000}:8080
+      - 8580:8080
     environment:
-      - 'OLLAMA_BASE_URL=http://ollama:11434'
-      - 'WEBUI_SECRET_KEY='
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=${OLLAMA_WEBUI_SECRET_KEY}
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ollama.rule=Host(`ollama.nico-nostheide.de`) || Host(`ollama.homelab.lan`)"
+      - "traefik.http.routers.ollama.entrypoints=websecure"
+      - "traefik.http.routers.ollama.tls.certresolver=myresolver"
+    networks:
+      - proxy
 
-volumes:
-  ollama: {}
-  open-webui: {}
+networks:
+  proxy:
+    external: true
